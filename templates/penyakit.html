@@ -1,0 +1,26 @@
+{% extends "layout.html" %}
+{% block content %}
+
+    <h2> Data Penyakit Dermatitis Imun </h2> <br>
+    <a class="btn btn-light" href="{{ url_for('insertPenyakit')}}" role="button">Tambah Data</a>
+    <br><br>
+      
+      <table id="customers">
+        <tr>
+            <th>Kode Penyakit</th>
+            <th>Nama Penyakit</th>
+            <th>Aksi</th>
+        </tr>
+        {% for p in data %}
+        <tr>
+            <td>{{ p.kd_penyakit }}</td>
+            <td><a href="{{ url_for('updatePenyakit', id=p.kd_penyakit) }}"> {{ p.nama_penyakit }}</a></td>
+            <td>
+                <form action="#" method="post"> 
+                    <button type="submit" class="btn btn-danger">Hapus</button>
+                    </form>
+            </td>
+            {% endfor %}
+        </tr>
+      </table>
+{% endblock content %}

@@ -1,0 +1,24 @@
+{% extends "layout.html" %}
+{% block content %}
+    <h2> Sistem Pakar Diagnosis Penyakit Dermatitis Imun menggunakan Teorema Bayes </h2>
+    <br>
+    <form>
+        <form action="/index.html">
+            <input type="checkbox" id=1 name="gj1" value="Bike">
+            <label for="vehicle1"> I have a bike</label><br>
+            <input type="checkbox" id=2 name="gj2" value="Car">
+            <label for="vehicle2"> I have a car</label><br>
+            <input type="checkbox" id=3 name="gj3" value="Boat">
+            <label for="vehicle3"> I have a boat</label><br><br>
+        <button type="submit" class="btn btn-secondary"> SUBMIT!</button>
+        </form>
+        <br>
+        <h2>Hasil Identifikasi</h2><br>
+        <h3>Daftar Gejala</h3>
+
+        <h3>Hasil</h3>
+
+        <br>
+        <h3>Nilai Probabilitas</h3>
+
+{% endblock content %}

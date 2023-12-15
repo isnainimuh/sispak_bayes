@@ -1,0 +1,17 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2> Data Gejala Dermatitis Imun </h2><br>
+<form action="{{url_for('insertGejala')}}" method="post"> 
+    <button type="submit" class="btn btn-secondary">Tambah Gejala</button>
+</form> 
+<br>
+{% for message in get_flashed_messages() %}
+<div class="alert alert-warning alert-dismissible fade show" role="alert">
+    {{ message }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  </div>
+{% endfor%}
+<br>
+
+
+{% endblock content %}
