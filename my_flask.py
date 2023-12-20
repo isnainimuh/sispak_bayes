@@ -1,9 +1,15 @@
 from flask import Flask, request, flash, render_template, url_for
-from form2 import NewGejalaForm, NewPenyakitForm
+from forms import NewGejalaForm, NewPenyakitForm, NewAturanForm
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import select
+from flask_wtf import FlaskForm
+from wtforms_alchemy import QuerySelectMultipleField
+from wtforms import widgets
 import os
+import numpy as np
 
 app = Flask(__name__)
+
 #koneksi ke database
 app.config["SQLALCHEMY_DATABASE_URI"] = 'mysql://root:''@localhost/bayes'
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -22,7 +28,7 @@ class Penyakit(db.Model):
         self.nama_penyakit=nama_penyakit
 
     def __repr__(self):
-        return f"{self.kd_penyakit} {self.nama_penyakit}"
+        return self.nama_penyakit
 
 class Gejala(db.Model):
     kd_gejala = db.Column(db.Integer, primary_key=True)
@@ -32,7 +38,7 @@ class Gejala(db.Model):
         self.gejala=gejala
     
     def __repr__(self):
-        return f"{self.kd_gejala} {self.gejala}"
+        return self.gejala
 
 class Aturan(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -43,6 +49,104 @@ class Aturan(db.Model):
     def __repr__(self):
         return f"{self.kd_gejala} {self.kd_penyakit} {self.probabilitas}"
 
+class QuerySelectMultipleFieldCheckBox(QuerySelectMultipleField):
+    widget = widgets.ListWidget(prefix_label=False)
+    option_widget = widgets.CheckboxInput()
+
+class CheckForm(FlaskForm):
+    pilih = QuerySelectMultipleFieldCheckBox("Gejala")
+
+def split_gejala(gejala):
+    return [gejala[i:i + 2] for i in range(0, len(gejala), 2)]
+
+def bayes(data_gejala):
+    daftar = []
+    for i in data_gejala:
+        row = db.session.execute(select(Aturan.kd_gejala, Aturan.kd_penyakit, Aturan.probabilitas).where(Aturan.kd_gejala==i)).all()
+        for x in range(len(row)):
+            c = row[x]
+            daftar.append(c)
+    print(f'Query db: {daftar}')
+    print(f'Banyak data query: {len(daftar)}')
+
+    #Hitung Unique Value Penyakit
+    pen=[]
+    for a in range(len(daftar)):
+        for b in range(1):
+            pen.append(daftar[a][b+1])
+    
+    array_pen = np.array(pen)
+    unique_pen = np.unique(array_pen)
+    unique_pen = unique_pen.tolist()
+    print(f'Jenis penyakit: {unique_pen}')
+    print(f'Jumlah penyakit: {len(unique_pen)}')
+
+    #Hitung total P gejala tiap penyakit
+    jumlah = []
+    for x in range(len(unique_pen)):
+        temp = 0
+        for y in range(len(daftar)):
+            for z in range(1):
+                if unique_pen[x] == daftar[y][z+1]:
+                    temp += daftar[y][z+2]
+        jumlah.append(temp)
+    print(f'Jumlah prob: {jumlah}')
+
+    #Hitung P|H
+    prob = []
+    ph = []
+    for x in range(len(unique_pen)):
+        dataph = []
+        dataprob = []
+        for y in range(len(daftar)):
+            for z in range(1):
+                if unique_pen[x] == daftar[y][z+1]:
+                    temp = daftar[y][z+2]/jumlah[x]
+                    dataph.append(temp)
+                    dataprob.append(daftar[y][z+2])
+        ph.append(dataph)
+        prob.append(dataprob)
+    print(f'Prob: {prob}')
+    print(f'P|H: {ph}')
+
+    #Hitung P(E|Hk) x P(Hk)
+    PHk = []
+    for x in range(len(prob)):
+        temp = 0
+        for y in range(len(prob[x])):
+            temp = temp + (prob[x][y]*ph[x][y])
+        PHk.append(temp)
+    print(f'P x Hk: {PHk}')
+
+    #Hitung P(H|E)
+    PHE = []
+    for x in range(len(prob)):
+        temp = []
+        for y in range(len(prob[x])):
+            hitung = (prob[x][y]*ph[x][y])/PHk[x]
+            temp.append(hitung)
+        PHE.append(temp)
+    print(f'P(H|E): {PHE}')
+
+    #Hitung Total Bayes
+    total_bayes = []
+    for x in range(len(prob)):
+        temp = 0
+        for y in range(len(prob[x])):
+            temp = temp + (prob[x][y]*PHE[x][y])
+        total_bayes.append(temp)
+    print(f'Total Bayes: {total_bayes}')
+
+    #Cari nilai max
+    for x in range(len(unique_pen)):
+        maksi = total_bayes[0]
+        hasil_penyakit = unique_pen[0]
+        if total_bayes[x] > maksi:
+            maksi = total_bayes[x]
+            hasil_penyakit = unique_pen[x]
+    print(f'Hasil: {hasil_penyakit} peluang: {maksi*100}%')
+    return hasil_penyakit, maksi
+
 
 @app.route("/")
 @app.route("/index")
@@ -51,26 +155,50 @@ def index():
 
 @app.route("/penyakit")
 def penyakit():
-    data = Penyakit.query.all()
+    data = Penyakit.query.order_by(Penyakit.kd_penyakit)
     return render_template('penyakit.html', data=data)
 
-@app.route("/insertPenyakit")
+@app.route("/insertPenyakit", methods=['POST'])
 def insertPenyakit():
     form = NewPenyakitForm()
     return render_template('formPenyakit.html', form=form)
 
 @app.route("/gejala")
 def gejala():
-    return render_template('gejala.html')
+    data = Gejala.query.order_by(Gejala.kd_gejala)
+    return render_template('gejala.html', data=data)
 
 @app.route("/insertGejala", methods=['POST'])
 def insertGejala():
     form = NewGejalaForm()
     return render_template('formGejala.html', form=form)
 
-@app.route("/prediksi")
+@app.route("/aturan")
+def aturan():
+    data = Aturan.query.order_by(Aturan.id)
+    return render_template('aturan.html', data=data)
+
+@app.route("/insertAturan", methods=['POST'])
+def insertAturan():
+    form = NewAturanForm()
+    return render_template('formAturan.html', form=form)
+
+@app.route("/prediksi", methods = ['GET','POST'])
 def prediksi():
-    return render_template('prediksi.html')
+    form = CheckForm()
+    form.pilih.query = Gejala.query.order_by(Gejala.kd_gejala)
+    indeks = []
+    if form.validate_on_submit():
+        data=form.pilih.data
+        for i in data:
+            indeks.append(i.kd_gejala)
+        print(indeks)
+        hasil=bayes(indeks)
+        hasil_penyakit = Penyakit.query.filter_by(kd_penyakit=hasil[0]).first()
+        peluang = hasil[1]*100
+        return render_template('prediksi.html', form=form, data=data, hasil=hasil_penyakit, peluang=peluang)
+    else:          
+        return render_template('prediksi.html', form=form)
 
 
 @app.route("/submitPen", methods=['POST','GET'])
@@ -94,8 +222,7 @@ def submitPen():
 def updatePenyakit(id):
     form = NewPenyakitForm()
     data_update = Penyakit.query.get_or_404(id)
-    #data_update = Penyakit.query.filter_by(kd_penyakit=id)
-    if request.method == 'POST':
+    if request.method == "POST":
         data_update.nama_penyakit = request.form['nama_penyakit']
         try:
             db.session.commit()
@@ -108,6 +235,26 @@ def updatePenyakit(id):
     else:
         return render_template ('editPenyakit.html', form=form, data_update=data_update)
 
+
+@app.route("/deletePen/<int:id>", methods=['POST','GET'])
+def deletePen(id):
+    data_delete = Penyakit.query.get_or_404(id)
+    try:
+        db.session.delete(data_delete)
+        db.session.commit()
+
+        #pesan notifikasi
+        flash("Data penyakit berhasil dihapus!")
+
+        #menampilkan sisa data
+        penyakit = Penyakit.query.order_by(Penyakit.kd_penyakit)
+        return render_template('penyakit.html', data=penyakit)
+    except Exception as e:
+        flash(f"Penghapusan data gagal! Error {e}")
+
+        #menampilkan sisa data
+        penyakit = Penyakit.query.order_by(Penyakit.kd_penyakit)
+        return render_template('penyakit.html', data=penyakit)
 
 
 
@@ -128,6 +275,102 @@ def submitGejala():
     else:
         return "Invalidate form"
 
+
+@app.route("/updateGejala/<int:id>", methods=['POST','GET'])
+def updateGejala(id):
+    form = NewGejalaForm()
+    data_update = Gejala.query.get_or_404(id)
+    if request.method == 'POST':
+        data_update.gejala = request.form['gejala']
+        try:
+            db.session.commit()
+            flash(f"Update gejala berhasil!")
+            return render_template('editGejala.html', form=form, data_update=data_update)
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Update gagal! Error {e}")
+            return render_template ('editGejala.html', form=form, data_update=data_update)
+    else:
+        return render_template ('editGejala.html', form=form, data_update=data_update)
+
+@app.route("/deleteGejala/<int:id>", methods=['POST','GET'])
+def deleteGejala(id):
+    data_delete = Gejala.query.get_or_404(id)
+    try:
+        db.session.delete(data_delete)
+        db.session.commit()
+
+        #pesan notifikasi
+        flash("Data gejala berhasil dihapus!")
+
+        #menampilkan sisa data
+        gejala = Gejala.query.order_by(Penyakit.kd_penyakit)
+        return render_template('gejala.html', data=gejala)
+    except Exception as e:
+        flash(f"Penghapusan data gagal! Error {e}")
+
+        #menampilkan sisa data
+        gejala = Gejala.query.order_by(Gejala.kd_gejala)
+        return render_template('gejala.html', data=gejala)
+
+@app.route("/submitAturan", methods=['POST','GET'])
+def submitAturan():
+    form = NewAturanForm(request.form)
+    if form.validate():
+        pen = Aturan(kd_penyakit=request.form['kd_penyakit'], kd_gejala=request.form['kd_gejala'], probabilitas=request.form['probabilitas'])
+        db.session.add(pen)
+        try:
+            db.session.commit()
+            flash(f"Aturan {pen.id} berhasil ditambahkan")
+            return render_template ('formAturan.html', penyakit=pen.id)  
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Aturan {pen.id} gagal ditambahkan. Error {e}")
+            return render_template  ('formAturan.html', penyakit=pen.id)
+    else:
+        return "Invalidate form"
+
+
+@app.route("/updateAturan/<int:id>", methods=['POST','GET'])
+def updateAturan(id):
+    form = NewAturanForm()
+    data_update = Aturan.query.get_or_404(id)
+    if request.method == "POST":
+        data_update.kd_penyakit = request.form['kd_penyakit']
+        data_update.kd_gejala = request.form['kd_gejala']
+        data_update.probabilitas = request.form['probabilitas']
+        try:
+            db.session.commit()
+            flash(f"Update aturan berhasil!")
+            return render_template('editAturan.html', form=form, data_update=data_update)
+        except Exception as e:
+            db.session.rollback()
+            flash(f"Update gagal! Error {e}")
+            return render_template ('editAturan.html', form=form, data_update=data_update)
+    else:
+        return render_template ('editAturan.html', form=form, data_update=data_update)
+
+
+@app.route("/deleteAturan/<int:id>", methods=['POST','GET'])
+def deleteAturan(id):
+    data_delete = Aturan.query.get_or_404(id)
+    try:
+        db.session.delete(data_delete)
+        db.session.commit()
+
+        #pesan notifikasi
+        flash("Data aturan berhasil dihapus!")
+
+        #menampilkan sisa data
+        aturan = Aturan.query.order_by(Aturan.id)
+        return render_template('aturan.html', data=aturan)
+    except Exception as e:
+        flash(f"Penghapusan data gagal! Error {e}")
+
+        #menampilkan sisa data
+        aturan = Aturan.query.order_by(Aturan.id)
+        return render_template('aturan.html', data=aturan)
+    
 
 if __name__ == '__main__':
     app.run(debug=True)
