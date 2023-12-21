@@ -56,9 +56,6 @@ class QuerySelectMultipleFieldCheckBox(QuerySelectMultipleField):
 class CheckForm(FlaskForm):
     pilih = QuerySelectMultipleFieldCheckBox("Gejala")
 
-def split_gejala(gejala):
-    return [gejala[i:i + 2] for i in range(0, len(gejala), 2)]
-
 def bayes(data_gejala):
     daftar = []
     for i in data_gejala:
